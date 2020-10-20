@@ -38,6 +38,15 @@ var (
 	setupLog = ctrl.Log.WithName("setup")
 )
 
+const (
+	// Must match port in config/webhook/ssp_webhook.yaml
+	WebhookPort = 8443
+	// This is the cert location as configured by OLM
+	WebhookCertDir  = "/tmp/k8s-webhook-server/serving-certs"
+	WebhookCertName = "tls.crt"
+	WebhookKeyName  = "tls.key"
+)
+
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 
@@ -75,6 +84,10 @@ func main() {
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "SSP")
+		os.Exit(1)
+	}
+	if err = (&sspv1alpha1.SSP{}).SetupWebhookWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create webhook", "webhook", "SSP")
 		os.Exit(1)
 	}
 	// +kubebuilder:scaffold:builder

@@ -23,3 +23,11 @@ spec:
         args:
         - "--metrics-addr=127.0.0.1:8080"
         - "--enable-leader-election"
+        volumeMounts:
+        - name: webhook-certs
+          mountPath: "/tmp/k8s-webhook-server/serving-certs"
+          readOnly: true
+      volumes:
+      - name: webhook-certs
+        secret:
+          secretName: webhook-service
