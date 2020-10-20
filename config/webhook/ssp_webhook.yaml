@@ -1,0 +1,30 @@
+---
+apiVersion: admissionregistration.k8s.io/v1beta1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: validating-webhook-configuration
+  namespace: system
+webhooks:
+  - name: ssp-validation.kubevirt.io
+    clientConfig:
+      service:
+        namespace: system
+        name: ssp-operator-update-controller-manager-service
+        port: 9443
+        path: /validate-ssp-kubevirt-io-v1alpha1-ssp
+    failurePolicy: Fail
+    rules:
+      - apiGroups:
+        - ssp.kubevirt.io
+        apiVersions:
+        - v1alpha1
+        operations:
+        - CREATE
+        - UPDATE
+        resources:
+        - nodemaintenances
+        scope: "Cluster"
+    admissionReviewVersions:
+      - v1beta1
+    sideEffects: None
+    timeoutSeconds: 5

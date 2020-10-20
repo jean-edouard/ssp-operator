@@ -1,6 +1,6 @@
 resources:
-- manifests.yaml
 - service.yaml
+- ssp_webhook.yaml
 
 configurations:
 - kustomizeconfig.yaml
