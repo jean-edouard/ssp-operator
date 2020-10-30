@@ -51,24 +51,43 @@ var _ = Describe("SSP Validation", func() {
 				// add an SSP CR to fake client
 				sspExisting := &SSP{
 					ObjectMeta: metav1.ObjectMeta{
-						Name: "test-ssp",
+						Name:      "test-ssp",
+						Namespace: "test-ns",
 					},
 					Spec: SSPSpec{},
 				}
 				objects = append(objects, sspExisting)
 			})
 
-			It("should be rejected", func() {
+			AfterEach(func() {
+				objects = make([]runtime.Object, 0)
+			})
+
+			It("should be rejected if on the same namespace", func() {
 				ssp := SSP{
 					ObjectMeta: metav1.ObjectMeta{
-						Name: "test-ssp2",
+						Name:      "test-ssp2",
+						Namespace: "test-ns",
 					},
 					Spec: SSPSpec{},
 				}
 				ssp.ForceCltValue(client)
 				err := ssp.ValidateCreate()
 				Expect(err).To(HaveOccurred())
-				Expect(err.Error()).To(ContainSubstring("creation failed, an SSP CR already exists: test-ssp"))
+				Expect(err.Error()).To(ContainSubstring(`creation failed, an SSP CR already exists in namespace "test-ns": test-ssp`))
+			})
+
+			It("should be accepted if on a different namespace", func() {
+				ssp := SSP{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-ssp2",
+						Namespace: "test-ns2",
+					},
+					Spec: SSPSpec{},
+				}
+				ssp.ForceCltValue(client)
+				err := ssp.ValidateCreate()
+				Expect(err).ToNot(HaveOccurred())
 			})
 		})
 	})

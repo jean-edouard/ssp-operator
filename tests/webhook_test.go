@@ -10,7 +10,7 @@ import (
 
 var _ = Describe("Validation webhook", func() {
 	Context("creation", func() {
-		It("should fail to create a second SSP CR", func() {
+		It("should fail to create a second SSP CR on the test namespace", func() {
 			ssp2 := &sspv1alpha1.SSP{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-ssp2",
@@ -27,7 +27,26 @@ var _ = Describe("Validation webhook", func() {
 				apiClient.Delete(ctx, ssp2)
 			}
 			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("creation failed, an SSP CR already exists: test-ssp"))
+			Expect(err.Error()).To(ContainSubstring(`creation failed, an SSP CR already exists in namespace "` + testNamespace + `": test-ssp`))
+		})
+
+		It("should succeed to create a second SSP CR on a different namespace", func() {
+			ssp2 := &sspv1alpha1.SSP{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-ssp2",
+					Namespace: "default",
+				},
+				Spec: sspv1alpha1.SSPSpec{
+					TemplateValidator: sspv1alpha1.TemplateValidator{
+						Replicas: templateValidatorReplicas,
+					},
+				},
+			}
+			err := apiClient.Create(ctx, ssp2)
+			if err == nil {
+				apiClient.Delete(ctx, ssp2)
+			}
+			Expect(err).ToNot(HaveOccurred())
 		})
 	})
 })

@@ -46,13 +46,13 @@ var _ webhook.Validator = &SSP{}
 func (r *SSP) ValidateCreate() error {
 	var ssps SSPList
 
-	ssplog.Info("validate create", "name", r.Name)
-	err := clt.List(context.TODO(), &ssps, &client.ListOptions{})
+	ssplog.Info("validate create", "name", r.Name, "namespace", r.Namespace)
+	err := clt.List(context.TODO(), &ssps, &client.ListOptions{Namespace: r.Namespace})
 	if err != nil {
-		return fmt.Errorf("could not list SSPs for validation, please try again: %v", err)
+		return fmt.Errorf(`could not list SSPs for validation, please try again: %v`, err)
 	}
 	if len(ssps.Items) > 0 {
-		return fmt.Errorf("creation failed, an SSP CR already exists: %v", ssps.Items[0].ObjectMeta.Name)
+		return fmt.Errorf(`creation failed, an SSP CR already exists in namespace "%v": %v`, ssps.Items[0].ObjectMeta.Namespace, ssps.Items[0].ObjectMeta.Name)
 	}
 
 	return nil
