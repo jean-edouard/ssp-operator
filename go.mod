@@ -5,6 +5,7 @@ go 1.13
 require (
 	github.com/coreos/prometheus-operator v0.41.1
 	github.com/go-logr/logr v0.1.0
+	github.com/kubevirt/kubevirt-ssp-operator v1.2.1
 	github.com/onsi/ginkgo v1.12.1
 	github.com/onsi/gomega v1.10.1
 	github.com/openshift/api v0.0.0-20200917102736-0a191b5b9bb0 // release-4.5
@@ -12,7 +13,7 @@ require (
 	github.com/operator-framework/operator-lib v0.1.0
 	k8s.io/api v0.18.6
 	k8s.io/apimachinery v0.18.6
-	k8s.io/client-go v8.0.0+incompatible
+	k8s.io/client-go v11.0.1-0.20190409021438-1a26190bd76a+incompatible
 	k8s.io/utils v0.0.0-20200821003339-5e75c0163111
 	kubevirt.io/controller-lifecycle-operator-sdk v0.1.0
 	sigs.k8s.io/controller-runtime v0.6.2
