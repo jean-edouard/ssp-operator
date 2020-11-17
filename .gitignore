@@ -1,3 +1,4 @@
+*~
 .vscode/*
 .history
 .idea
@@ -7,3 +8,5 @@ build/_output/*
 bin/*
 bundle/*
 cover.out
+data/crd/ssp.kubevirt.io_ssps.yaml
+data/olm-catalog/ssp-operator.clusterserviceversion.yaml
