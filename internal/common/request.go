@@ -19,4 +19,5 @@ type Request struct {
 	Instance             *ssp.SSP
 	Logger               logr.Logger
 	ResourceVersionCache VersionCache
+	LegacyCRDExists      bool
 }

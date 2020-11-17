@@ -1,12 +1,11 @@
 package metrics
 
 import (
-	"context"
 	"fmt"
 
 	promv1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
 	kvsspv1 "github.com/kubevirt/kubevirt-ssp-operator/pkg/apis/kubevirt/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -35,8 +34,35 @@ func (m *metrics) WatchClusterTypes() []runtime.Object {
 	return nil
 }
 
+func (m *metrics) PauseCRs(request *common.Request) error {
+	patch := []byte(`{"metadata":{"annotations":{"kubevirt.io/operator.paused": "true"}}}`)
+	var kubevirtMetricsAggregations kvsspv1.KubevirtMetricsAggregationList
+	err := request.Client.List(request.Context, &kubevirtMetricsAggregations, &client.ListOptions{})
+	if err != nil {
+		if errors.IsNotFound(err) {
+			request.Logger.Info(fmt.Sprintf("No legacy metrics aggregation CR found"))
+			return nil
+		} else {
+			request.Logger.Error(err, fmt.Sprintf("Error listing metrics aggregation CRs: %s", err))
+			return err
+		}
+	}
+	for _, kubevirtMetricsAggregation := range kubevirtMetricsAggregations.Items {
+		err = request.Client.Patch(request.Context, &kubevirtMetricsAggregation,
+			client.RawPatch(types.MergePatchType, patch))
+		if err != nil {
+			// Patching failed, maybe the CR just got removed? Log an error but keep going.
+			request.Logger.Error(err, fmt.Sprintf("Error pausing %s from namespace %s: %s",
+				kubevirtMetricsAggregation.ObjectMeta.Name,
+				kubevirtMetricsAggregation.ObjectMeta.Namespace,
+				err))
+		}
+	}
+
+	return nil
+}
+
 func (m *metrics) Reconcile(request *common.Request) ([]common.ResourceStatus, error) {
-	pauseCRs(request)
 	return common.CollectResourceStatus(request,
 		reconcilePrometheusRule,
 	)
@@ -50,32 +76,6 @@ var _ operands.Operand = &metrics{}
 
 func GetOperand() operands.Operand {
 	return &metrics{}
-}
-
-func pauseCRs(request *common.Request) {
-	patch := []byte(`{"metadata":{"annotations":{"kubevirt.io/operator.paused": "true"}}}`)
-	var kubevirtMetricsAggregations kvsspv1.KubevirtMetricsAggregationList
-	err := request.Client.List(context.TODO(), &kubevirtMetricsAggregations, &client.ListOptions{})
-	if err != nil {
-		request.Logger.Error(err, fmt.Sprintf("Error listing metrics aggregations: %s", err))
-		return
-	}
-	if err == nil && len(kubevirtMetricsAggregations.Items) > 0 {
-		for _, kubevirtMetricsAggregation := range kubevirtMetricsAggregations.Items {
-			err = request.Client.Patch(context.TODO(), &kvsspv1.KubevirtMetricsAggregation{
-				ObjectMeta: metav1.ObjectMeta{
-					Namespace: kubevirtMetricsAggregation.ObjectMeta.Namespace,
-					Name:      kubevirtMetricsAggregation.ObjectMeta.Name,
-				},
-			}, client.RawPatch(types.MergePatchType, patch))
-			if err != nil {
-				request.Logger.Error(err, fmt.Sprintf("Error pausing %s from namespace %s: %s",
-					kubevirtMetricsAggregation.ObjectMeta.Name,
-					kubevirtMetricsAggregation.ObjectMeta.Namespace,
-					err))
-			}
-		}
-	}
 }
 
 func reconcilePrometheusRule(request *common.Request) (common.ResourceStatus, error) {

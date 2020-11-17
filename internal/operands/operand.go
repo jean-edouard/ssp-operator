@@ -17,6 +17,9 @@ type Operand interface {
 	// WatchClusterTypes returns a slice of cluster resources, that the operator should watch.
 	WatchClusterTypes() []runtime.Object
 
+	// PauseCRs adds the pause annotation to legacy CRs to avoid conflicts on upgrade
+	PauseCRs(*common.Request) error
+
 	// Reconcile creates and updates resources.
 	Reconcile(*common.Request) ([]common.ResourceStatus, error)
 

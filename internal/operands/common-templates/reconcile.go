@@ -1,7 +1,6 @@
 package common_templates
 
 import (
-	"context"
 	"fmt"
 
 	kvsspv1 "github.com/kubevirt/kubevirt-ssp-operator/pkg/apis/kubevirt/v1"
@@ -9,7 +8,6 @@ import (
 	core "k8s.io/api/core/v1"
 	rbac "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"kubevirt.io/ssp-operator/internal/common"
@@ -30,12 +28,13 @@ var (
 // +kubebuilder:rbac:groups=template.openshift.io,resources=templates,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterroles;roles;rolebindings,verbs=get;list;watch;create;update;patch;delete
 
+// +kubebuilder:rbac:groups=ssp.kubevirt.io,resources=kubevirtcommontemplatesbundles,verbs=get;list;watch;create;update;patch;delete
+
 // RBAC for created roles
 // +kubebuilder:rbac:groups=core,resources=persistentvolumeclaims,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=core,resources=persistentvolumeclaims/status,verbs=get;list;watch
 // +kubebuilder:rbac:groups=cdi.kubevirt.io,resources=datavolumes,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=cdi.kubevirt.io,resources=datavolumes/source,verbs=create
-// +kubebuilder:rbac:groups=ssp.kubevirt.io,resources=kubevirtcommontemplatesbundles,verbs=get;list;watch;create;update;patch;delete
 
 type commonTemplates struct{}
 
@@ -61,8 +60,35 @@ func (c *commonTemplates) WatchTypes() []runtime.Object {
 	return nil
 }
 
+func (c *commonTemplates) PauseCRs(request *common.Request) error {
+	patch := []byte(`{"metadata":{"annotations":{"kubevirt.io/operator.paused": "true"}}}`)
+	var kubevirtCommonTemplatesBundles kvsspv1.KubevirtCommonTemplatesBundleList
+	err := request.Client.List(request.Context, &kubevirtCommonTemplatesBundles, &client.ListOptions{})
+	if err != nil {
+		if errors.IsNotFound(err) {
+			request.Logger.Info(fmt.Sprintf("No legacy common template bundle CR found"))
+			return nil
+		} else {
+			request.Logger.Error(err, fmt.Sprintf("Error listing common template bundle CRs: %s", err))
+			return err
+		}
+	}
+	for _, kubevirtCommonTemplatesBundle := range kubevirtCommonTemplatesBundles.Items {
+		err = request.Client.Patch(request.Context, &kubevirtCommonTemplatesBundle,
+			client.RawPatch(types.MergePatchType, patch))
+		if err != nil {
+			// Patching failed, maybe the CR just got removed? Log an error but keep going.
+			request.Logger.Error(err, fmt.Sprintf("Error pausing %s from namespace %s: %s",
+				kubevirtCommonTemplatesBundle.ObjectMeta.Name,
+				kubevirtCommonTemplatesBundle.ObjectMeta.Namespace,
+				err))
+		}
+	}
+
+	return nil
+}
+
 func (c *commonTemplates) Reconcile(request *common.Request) ([]common.ResourceStatus, error) {
-	pauseCRs(request)
 	funcs := []common.ReconcileFunc{
 		reconcileGoldenImagesNS,
 		reconcileViewRole,
@@ -93,32 +119,6 @@ func (c *commonTemplates) Cleanup(request *common.Request) error {
 		}
 	}
 	return nil
-}
-
-func pauseCRs(request *common.Request) {
-	patch := []byte(`{"metadata":{"annotations":{"kubevirt.io/operator.paused": "true"}}}`)
-	var kubevirtCommonTemplatesBundles kvsspv1.KubevirtCommonTemplatesBundleList
-	err := request.Client.List(context.TODO(), &kubevirtCommonTemplatesBundles, &client.ListOptions{})
-	if err != nil {
-		request.Logger.Error(err, fmt.Sprintf("Error listing common template bundles: %s", err))
-		return
-	}
-	if err == nil && len(kubevirtCommonTemplatesBundles.Items) > 0 {
-		for _, kubevirtCommonTemplatesBundle := range kubevirtCommonTemplatesBundles.Items {
-			err = request.Client.Patch(context.TODO(), &kvsspv1.KubevirtCommonTemplatesBundle{
-				ObjectMeta: metav1.ObjectMeta{
-					Namespace: kubevirtCommonTemplatesBundle.ObjectMeta.Namespace,
-					Name:      kubevirtCommonTemplatesBundle.ObjectMeta.Name,
-				},
-			}, client.RawPatch(types.MergePatchType, patch))
-			if err != nil {
-				request.Logger.Error(err, fmt.Sprintf("Error pausing %s from namespace %s: %s",
-					kubevirtCommonTemplatesBundle.ObjectMeta.Name,
-					kubevirtCommonTemplatesBundle.ObjectMeta.Namespace,
-					err))
-			}
-		}
-	}
 }
 
 func reconcileGoldenImagesNS(request *common.Request) (common.ResourceStatus, error) {

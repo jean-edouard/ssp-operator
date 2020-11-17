@@ -26,8 +26,10 @@ import (
 	conditionsv1 "github.com/openshift/custom-resource-status/conditions/v1"
 	libhandler "github.com/operator-framework/operator-lib/handler"
 	"k8s.io/api/core/v1"
+	//xclientv1 "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/typed/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	lifecycleapi "kubevirt.io/controller-lifecycle-operator-sdk/pkg/sdk/api"
@@ -56,6 +58,14 @@ var sspOperands = []operands.Operand{
 	// TODO - add other operands here
 }
 
+// 1:1 list of legacy CRDs corresponding to the operands above
+var kvsspCRDs = []string{
+	"kubevirtmetricsaggregations.ssp.kubevirt.io",
+	"kubevirttemplatevalidators.ssp.kubevirt.io",
+	"kubevirtcommontemplatesbundles.ssp.kubevirt.io",
+	"kubevirtnodelabellerbundles.ssp.kubevirt.io",
+}
+
 // SSPReconciler reconciles a SSP object
 type SSPReconciler struct {
 	client.Client
@@ -69,6 +79,7 @@ type SSPReconciler struct {
 // +kubebuilder:rbac:groups=ssp.kubevirt.io,resources=ssps,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=ssp.kubevirt.io,resources=ssps/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=ssp.kubevirt.io,resources=ssps/finalizers,verbs=update
+// +kubebuilder:rbac:groups=apiextensions.k8s.io,resources=customresourcedefinitions,verbs=list
 
 func (r *SSPReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	reqLogger := r.Log.WithValues("ssp", req.NamespacedName)
@@ -188,8 +199,32 @@ func cleanup(request *common.Request) error {
 }
 
 func reconcileOperands(sspRequest *common.Request) ([]common.ResourceStatus, error) {
+	// Get the list of CRDs and check which legacy CRDs are present
+	crds := &unstructured.UnstructuredList{}
+	crds.SetKind("CustomResourceDefinition")
+	crds.SetAPIVersion("apiextensions.k8s.io/v1")
+	crdsPresent := make([]bool, len(sspOperands)) // All default to false
+	err := sspRequest.Client.List(sspRequest.Context, crds)
+	if err == nil {
+		for _, item := range crds.Items {
+			name := item.GetName()
+			for i, s := range kvsspCRDs {
+				if s == name {
+					crdsPresent[i] = true
+					break
+				}
+			}
+		}
+	}
+
 	allStatuses := make([]common.ResourceStatus, 0, len(sspOperands))
-	for _, operand := range sspOperands {
+	for i, operand := range sspOperands {
+		if crdsPresent[i] {
+			err := operand.PauseCRs(sspRequest)
+			if err != nil {
+				return nil, err
+			}
+		}
 		statuses, err := operand.Reconcile(sspRequest)
 		if err != nil {
 			return nil, err
